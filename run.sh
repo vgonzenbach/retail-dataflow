@@ -12,4 +12,4 @@ export EVENT_PATH=data/order_event.json
 #gcloud auth application-default login
 
 python3 publish.py --input=$EVENT_PATH --topic=$TOPIC_ID
-python3 pipeline.py --input=$SUBSCRIPTION_ID --streaming
+python3 pipeline.py --input_subscription=$SUBSCRIPTION_ID --streaming
