@@ -1,14 +1,19 @@
 import argparse
 import logging
-import apache_beam as beam
-from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions
+import json
+from datetime import datetime
 
+import apache_beam as beam
+from apache_beam import window
+from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions
 from apache_beam.io import ReadFromPubSub
+from apache_beam.io.fileio import WriteToFiles
 
 
 logging.getLogger().setLevel(logging.INFO)
 
-class RetailPipelineOptions(PipelineOptions):
+
+class MyOptions(PipelineOptions):
     @classmethod
     def _add_argparse_args(cls, parser):
         parser.add_argument(
@@ -21,20 +26,29 @@ class RetailPipelineOptions(PipelineOptions):
             required=False, # TODO: change
             help='Output file to write results to.')
 # set options
-retail_pipeline_options = PipelineOptions().view_as(RetailPipelineOptions)
-input_subscription, output_gcs = retail_pipeline_options.input_subscription, retail_pipeline_options.output_gcs
+my_opts = PipelineOptions().view_as(MyOptions)
 pipeline_options=PipelineOptions()
 pipeline_options.view_as(StandardOptions).streaming = True
 
+def build_destination(data):
+    event = json.loads(data)
+    event_type = event["event_type"]
+    ts: str = event["order_date"] or event["timestamp"]
+    ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    return f"{event_type}/{ts:%Y/%m/%d/%H/%M}/{event_type}_{ts:%Y%m%d%H%M}"
+
 with beam.Pipeline(options=pipeline_options) as pipeline:
 
-    # check topic or subscription
     events = (
         pipeline 
-        | 'Read' >> ReadFromPubSub(subscription=input_subscription)
+        | 'Read' >> ReadFromPubSub(subscription=my_opts.input_subscription)
         | 'Decode' >> beam.Map(lambda b: b.decode('utf-8'))
-        | 'PrintToStdout' >> beam.Map(print)
+        | 'WindowInto1Min' >> beam.WindowInto(window.FixedWindows(60)) # preparing for WriteToFiles
     )
 
-if __name__ == '__main__':
-    logging.getLogger().setLevel(logging.INFO)
+    events | 'WriteToGCS' >> WriteToFiles(
+        path=my_opts.output_gcs, 
+        destination=build_destination,
+        file_naming=lambda window, pane, shard_index, total_shards, compression, destination: f"{destination}.json"
+    )
+    

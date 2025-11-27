@@ -3,7 +3,7 @@ import json
 import logging
 from google.cloud import pubsub_v1
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__file__)
 
 def load_event(path: str) -> bytes:
     """Helper function to load specific events from a file."""
