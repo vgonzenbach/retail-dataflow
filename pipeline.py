@@ -1,7 +1,7 @@
 import argparse
 import logging
 import apache_beam as beam
-from apache_beam.options.pipeline_options import PipelineOptions, SetupOptions
+from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions
 from apache_beam.runners.runner import PipelineResult
 
 from apache_beam.io import ReadFromPubSub, WriteToText
@@ -27,10 +27,10 @@ def run(argv=None, save_main_session=True) -> PipelineResult:
     known_args, pipeline_args = parser.parse_known_args(argv)
 
     pipeline_options = PipelineOptions(pipeline_args)
-
-    pipeline = beam.Pipeline(options=PipelineOptions(pipeline_args))
+    pipeline_options.view(StandardOptions).streaming = True
+    pipeline = beam.Pipeline(options=pipeline_options)
     # check topic or subscription
-    message = (
+    events = (
         pipeline 
         | 'Read' >> ReadFromPubSub(subscription=known_args.input)
         | 'Decode' >> beam.Map(lambda b: b.decode('utf-8'))
