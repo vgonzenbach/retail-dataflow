@@ -12,3 +12,4 @@ PARTITION BY TIMESTAMP_TRUNC(order_date, DAY)
 CLUSTER BY 
     status, -- allows status-based analytics
     customer_id -- for joining with dim_customer + finding specific customers
+;

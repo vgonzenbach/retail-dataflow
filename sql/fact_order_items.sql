@@ -13,3 +13,4 @@ PARTITION BY TIMESTAMP_TRUNC(order_date, DAY)
 CLUSTER BY 
     product_id, -- allows product-based analytics
     order_id -- for joining with fact_order_header + finding specific orders
+;
