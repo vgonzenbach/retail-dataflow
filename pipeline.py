@@ -51,4 +51,6 @@ with beam.Pipeline(options=pipeline_options) as pipeline:
         destination=build_destination,
         file_naming=lambda window, pane, shard_index, total_shards, compression, destination: f"{destination}.json"
     )
+
+    
     

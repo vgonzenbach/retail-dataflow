@@ -11,5 +11,5 @@ export EVENT_PATH=data/order_event.json
 #gcloud auth application-default set-quota-project $PROJECT_ID
 #gcloud auth application-default login
 
-python3 publish.py --input=$EVENT_PATH --topic=$TOPIC_ID
+python3 publish.py --topic=$TOPIC_ID
 python3 pipeline.py --input_subscription=$SUBSCRIPTION_ID --output_gcs=gs://gymshark-retail-events/output

@@ -2,17 +2,9 @@ import argparse
 import json
 import logging
 from google.cloud import pubsub_v1
+from data.fake import make_order_event
 
 logger = logging.getLogger(__file__)
-
-def load_event(path: str) -> bytes:
-    """Helper function to load specific events from a file."""
-    with open(path, mode='rb') as f:
-        logger.info('Reading json event from file...')
-        event: dict = json.load(f)
-        event: str = json.dumps(event)
-        event: bytes = bytes(event, encoding='utf-8')
-    return event
 
 def publish_event(topic: str, data: bytes):
     with pubsub_v1.PublisherClient() as publisher:
@@ -26,17 +18,14 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--input',
-        dest='input',
-        required=True,
-        help='Input file.'
-    )
-    parser.add_argument(
         '--topic',
         dest='topic',
         required=True,
         help='Pubsub Topic to which to publish.'
     )
     args  = parser.parse_args()
-    event = load_event(args.input)
+    event: dict = make_order_event()
+    event: str = json.dumps(event, indent=2)
+    logger.info(event)
+    event: bytes = bytes(event, encoding='utf-8')
     publish_event(topic=args.topic, data=event)
