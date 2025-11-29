@@ -12,7 +12,7 @@ from apache_beam.utils.timestamp import Timestamp
 from apache_beam.io import ReadFromPubSub
 from apache_beam.io.fileio import WriteToFiles
 
-from transforms.orders import SplitOrderDoFn
+from transforms.order import SplitOrderDoFn
 from transforms.common import SplitEventsByTypeDoFn, WriteFactToBigQuery
 
 logging.getLogger().setLevel(logging.DEBUG)
