@@ -1,4 +1,5 @@
-import argparse
+from __future__ import annotations
+from typing import Callable, Any
 import logging
 import json
 from datetime import datetime
@@ -26,9 +27,9 @@ class MyOptions(PipelineOptions):
             required=False, # TODO: change
             help='Output file to write results to.')
 # set options
-my_opts = PipelineOptions().view_as(MyOptions)
-pipeline_options=PipelineOptions()
-pipeline_options.view_as(StandardOptions).streaming = True
+opts = PipelineOptions()
+my_opts = opts.view_as(MyOptions)
+opts.view_as(StandardOptions).streaming = True
 
 def build_destination(data):
     event = json.loads(data)
@@ -37,7 +38,7 @@ def build_destination(data):
     ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
     return f"{event_type}/{ts:%Y/%m/%d/%H/%M}/{event_type}_{ts:%Y%m%d%H%M}"
 
-with beam.Pipeline(options=pipeline_options) as pipeline:
+with beam.Pipeline(options=opts) as pipeline:
 
     events = (
         pipeline 
