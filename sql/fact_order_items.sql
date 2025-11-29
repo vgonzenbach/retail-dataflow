@@ -4,9 +4,7 @@ CREATE TABLE IF NOT EXISTS events.fact_order_items (
     product_id STRING, 
     product_name STRING,
     quantity INTEGER, 
-    price DECIMAL,
-    _inserted_at TIMESTAMP
-    --_source_system STRING -- can be used to identify source system
+    price DECIMAL
 ) 
 PARTITION BY TIMESTAMP_TRUNC(order_date, DAY) 
 CLUSTER BY 

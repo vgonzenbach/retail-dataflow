@@ -10,7 +10,7 @@ class SplitEventsByTypeDoFn(DoFn):
     """
     def process(self, element: dict):
         event: dict = deepcopy(element)
-        event_type = event.get('event_type', None)
+        event_type = event.pop('event_type', None)
 
         if not event_type:
             yield pvalue.TaggedOutput('invalid', {'error': "Event does not contain required field 'event_type'", 'event': event})
