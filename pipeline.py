@@ -48,8 +48,6 @@ def build_gcs_destination(data: str):
     ts = datetime.fromisoformat(ts)
     return f"{event_type}/{ts:%Y/%m/%d/%H/%M}/{event_type}_{ts:%Y%m%d%H%M}.json"
 
-def make_file_namer(destination: str):
-    ...
 
 def name_file(window, pane, shard_index, total_shards, compression, destination):
     print(f"{window=!r}")
@@ -59,6 +57,7 @@ def name_file(window, pane, shard_index, total_shards, compression, destination)
     filename = f"{destination}_{timestamp:%Y%m%d%H%M}.json"
     return filepath + "/" + filename
 
+
 def debug_print(x):
     print(x)
     return x
@@ -67,48 +66,22 @@ with beam.Pipeline(options=opts) as pipeline:
 
     events = (
         pipeline 
-        | 'Read' >> ReadFromPubSub(subscription=my_opts.input_subscription)
+        | 'ReadPubSub' >> ReadFromPubSub(subscription=my_opts.input_subscription)
         | 'ParseJSON' >> beam.Map(lambda b: json.loads(b.decode('utf-8')))
         #| 'TimestampEvent' >> beam.Map(assign_event_time)
         | 'WindowInto1Min' >> beam.WindowInto(FixedWindows(60)) 
-        #| 'SplitEventsByType' >> beam.ParDo(SplitEventsByTypeDoFn()).with_outputs('order', 'invalid', 'unknown_types')
     )
 
-    tag = 'order'
-    (
-    #events.order
-    events
-    | f'Stringify{tag}' >> beam.Map(json.dumps)
-    | f'Debug{tag}' >> beam.Map(debug_print)
-    | f'Write{tag}ToGCS' >> WriteToFiles(
-        path=my_opts.output_gcs,
-        destination=build_gcs_destination,
-        file_naming=lambda window, pane, shard_index, total_shards, compression, destination: f"{destination}.json")
+    ( # write raw events to GCS
+        events
+        | f'ToText' >> beam.Map(json.dumps)
+        | f'WriteToGCS' >> WriteToFiles(
+            path=my_opts.output_gcs,
+            destination=lambda ev: json.loads(ev)['event_type'],
+            file_naming=name_file)
     )
-    """
-
-
-
-    # --- write events to GCS staging layer ---
-    events_named = [
-        ('order', events.order)
-        # ("inventory", events.inventory),
-        # ("user_activity", events.user_activity),
-    ]
-    for name, ev in events_named:
-        tag = name.capitalize()
-        (
-            ev
-            | f'Stringify{tag}' >> beam.Map(json.dumps)
-            | f'Debug{tag}' >> beam.Map(debug_print)
-            | f'Write{tag}ToGCS' >> WriteToFiles(
-                path=f"{my_opts.output_gcs}/output",
-                destination=build_gcs_destination,
-                file_naming=lambda window, pane, shard_index, total_shards, compression, destination: destination)
-        )
     # --- write errors to GCS ---
-
-
+    """
     # split orders into header and items
     orders_split = events.order | 'SplitOrderEvents' >> beam.ParDo(SplitOrderDoFn()).with_outputs('items', 'header')
     order_headers = orders_split.header
