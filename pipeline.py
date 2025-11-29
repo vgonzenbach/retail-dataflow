@@ -12,8 +12,8 @@ from apache_beam.utils.timestamp import Timestamp
 from apache_beam.io import ReadFromPubSub
 from apache_beam.io.fileio import WriteToFiles
 
-from transforms.order import SplitOrderDoFn
 from transforms.common import SplitEventsByTypeDoFn, WriteFactToBigQuery
+from transforms.order import SplitOrderDoFn
 
 logging.getLogger().setLevel(logging.DEBUG)
 
@@ -36,27 +36,18 @@ opts.view_as(StandardOptions).streaming = True
 
 def assign_event_time(ev: dict) -> TimestampedValue:
     timestamp: str = ev['order_date'] or ev['timestamp']
+    print(f'\n{timestamp=!r}\n')
     timestamp: datetime = datetime.fromisoformat(timestamp)
+    print(f'\n{timestamp=!r}\n')
     timestamp: Timestamp = Timestamp.from_utc_datetime(timestamp)
+    print(f'\n{timestamp=!r}\n')
     return TimestampedValue(ev, timestamp)
 
-# TODO: remove
-def build_gcs_destination(data: str):
-    event: dict = json.loads(data)
-    event_type: str = event['event_type']
-    ts: str = event["order_date"] or event["timestamp"]
-    ts = datetime.fromisoformat(ts)
-    return f"{event_type}/{ts:%Y/%m/%d/%H/%M}/{event_type}_{ts:%Y%m%d%H%M}.json"
-
-
 def name_file(window, pane, shard_index, total_shards, compression, destination):
-    print(f"{window=!r}")
     timestamp: datetime = window.start.to_utc_datetime()
-    print(f"{timestamp=!r}")
     filepath = f"{destination}/{timestamp:%Y/%m/%d/%H/%M}"
     filename = f"{destination}_{timestamp:%Y%m%d%H%M}.json"
     return filepath + "/" + filename
-
 
 def debug_print(x):
     print(x)
@@ -68,8 +59,10 @@ with beam.Pipeline(options=opts) as pipeline:
         pipeline 
         | 'ReadPubSub' >> ReadFromPubSub(subscription=my_opts.input_subscription)
         | 'ParseJSON' >> beam.Map(lambda b: json.loads(b.decode('utf-8')))
-        #| 'TimestampEvent' >> beam.Map(assign_event_time)
-        | 'WindowInto1Min' >> beam.WindowInto(FixedWindows(60)) 
+        | 'TimestampEvent' >> beam.Map(assign_event_time)
+        | 'WindowInto1Min' >> beam.WindowInto(
+            FixedWindows(60),
+            allowed_lateness=300)
     )
 
     ( # write raw events to GCS
@@ -80,7 +73,6 @@ with beam.Pipeline(options=opts) as pipeline:
             destination=lambda ev: json.loads(ev)['event_type'],
             file_naming=name_file)
     )
-    # --- write errors to GCS ---
     """
     # split orders into header and items
     orders_split = events.order | 'SplitOrderEvents' >> beam.ParDo(SplitOrderDoFn()).with_outputs('items', 'header')
