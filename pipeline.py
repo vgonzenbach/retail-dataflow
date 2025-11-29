@@ -65,7 +65,7 @@ with beam.Pipeline(options=opts) as pipeline:
 
     events = (
         pipeline 
-        | 'Read' >> ReadFromPubSub(subscription=my_opts.input_subscription, timestamp_attribute='event_timestamp')
+        | 'Read' >> ReadFromPubSub(subscription=my_opts.input_subscription)
         | 'Decode' >> beam.Map(lambda b: b.decode('utf-8'))
         | 'ToDict' >> beam.Map(json.loads)
         | 'Times' >> beam.Map(assign_event_time)
