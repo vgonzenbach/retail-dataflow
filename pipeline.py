@@ -41,10 +41,12 @@ def assign_event_time(ev: dict) -> TimestampedValue:
     return TimestampedValue(ev, timestamp)
 
 # TODO: remove
-#def build_gcs_destination(event):
-#    ts: str = event["order_date"] or event["timestamp"]
-#    ts = datetime.fromisoformat(ts)
-#    return f"{event_type}/{ts:%Y/%m/%d/%H/%M}/{event_type}_{ts:%Y%m%d%H%M}.json"
+def build_gcs_destination(data: str):
+    event: dict = json.loads(data)
+    event_type: str = event['event_type']
+    ts: str = event["order_date"] or event["timestamp"]
+    ts = datetime.fromisoformat(ts)
+    return f"{event_type}/{ts:%Y/%m/%d/%H/%M}/{event_type}_{ts:%Y%m%d%H%M}.json"
 
 def make_file_namer(destination: str):
     ...
@@ -66,12 +68,26 @@ with beam.Pipeline(options=opts) as pipeline:
     events = (
         pipeline 
         | 'Read' >> ReadFromPubSub(subscription=my_opts.input_subscription)
-        | 'Decode' >> beam.Map(lambda b: b.decode('utf-8'))
-        | 'ToDict' >> beam.Map(json.loads)
-        | 'Times' >> beam.Map(assign_event_time)
+        | 'ParseJSON' >> beam.Map(lambda b: json.loads(b.decode('utf-8')))
+        #| 'TimestampEvent' >> beam.Map(assign_event_time)
         | 'WindowInto1Min' >> beam.WindowInto(FixedWindows(60)) 
-        | 'SplitEventsByType' >> beam.ParDo(SplitEventsByTypeDoFn()).with_outputs('order', 'invalid', 'unknown_types')
+        #| 'SplitEventsByType' >> beam.ParDo(SplitEventsByTypeDoFn()).with_outputs('order', 'invalid', 'unknown_types')
     )
+
+    tag = 'order'
+    (
+    #events.order
+    events
+    | f'Stringify{tag}' >> beam.Map(json.dumps)
+    | f'Debug{tag}' >> beam.Map(debug_print)
+    | f'Write{tag}ToGCS' >> WriteToFiles(
+        path=my_opts.output_gcs,
+        destination=build_gcs_destination,
+        file_naming=lambda window, pane, shard_index, total_shards, compression, destination: f"{destination}.json")
+    )
+    """
+
+
 
     # --- write events to GCS staging layer ---
     events_named = [
@@ -86,9 +102,9 @@ with beam.Pipeline(options=opts) as pipeline:
             | f'Stringify{tag}' >> beam.Map(json.dumps)
             | f'Debug{tag}' >> beam.Map(debug_print)
             | f'Write{tag}ToGCS' >> WriteToFiles(
-                path=f"{my_opts.output_gcs}/output/{name}/",
-                destination=lambda _: name,
-                file_naming=name_file)
+                path=f"{my_opts.output_gcs}/output",
+                destination=build_gcs_destination,
+                file_naming=lambda window, pane, shard_index, total_shards, compression, destination: destination)
         )
     # --- write errors to GCS ---
 
@@ -100,3 +116,4 @@ with beam.Pipeline(options=opts) as pipeline:
 
     order_headers | 'WriteOrderHeaderToBQ' >> WriteFactToBigQuery(table='events.fact_order_header')
     order_items | 'WriteOrderItemsToBQ' >> WriteFactToBigQuery(table='events.fact_order_items')
+    """
