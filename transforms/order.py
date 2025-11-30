@@ -3,6 +3,8 @@ from datetime import datetime
 from typing import NamedTuple, List
 from decimal import Decimal
 
+from apache_beam import DoFn, pvalue
+
 # EVENT Fields
 class OrderShippingAddress(NamedTuple):
     street: str
@@ -25,17 +27,7 @@ class OrderEvent(NamedTuple):
     shipping_address: OrderShippingAddress
     items: List[OrderItem]
     total_amount: Decimal
-    # N. B. Not a field (do NOT annotate)
-    VALID_STATES = {'pending', 'processing', 'shipped', 'delivered'}
-        
-    def validate(self):
-        errors = []
-        if self.status not in self.VALID_STATES:
-            errors.append(f"Value of field 'status' is not a member of OrderEvent.VALID_STATES={self.VALID_STATES!r}.")
 
-        if self.total_amount != sum(item['price'] * item['quantity'] for item in self.items):
-            errors.append(f"Value of field 'total_amount' != sum(price * quantity) for all items.")
-        return errors
 
 class FactOrderHeader(NamedTuple):
     order_id: str
@@ -103,3 +95,20 @@ class FactOrderItem(NamedTuple):
 
     def to_dict(self) -> dict:
         return self._asdict()
+
+class OrderEventDQValidatorDoFn(DoFn):
+    def process(self, event: OrderEvent):
+            # N. B. Not a field (do NOT annotate)
+        errors = []
+        valid_states = {'pending', 'processing', 'shipped', 'delivered'}
+        if event.status not in valid_states:
+            errors.append(f"Value of field 'status' is not in set of valid states: {valid_states!r}.")
+
+        computed_total = sum(item['price'] * item['quantity'] for item in event.items)
+        if event.total_amount != computed_total:
+            errors.append(f"Value of field 'total_amount' != sum(price * quantity) for all items.")
+
+        if errors:
+            yield pvalue.TaggedOutput("invalid", {"errors": errors, "event": event._asdict()})
+        else:
+            yield event

@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Union, ClassVar, Sequence
 from apache_beam import DoFn, pvalue
 from apache_beam.io.gcp.bigquery import BigQueryDisposition, WriteToBigQuery
 
@@ -26,14 +25,6 @@ class SplitAndCastEventsDoFn(DoFn):
         """
         yield pvalue.TaggedOutput("unknown", event)
 
-
-class EventDQValidatorDoFn(DoFn):
-    def process(self, event: Union[OrderEvent, "InventoryEvent", "UserActivityEvent"]):
-        errors = event.validate()
-        if errors:
-            yield pvalue.TaggedOutput("invalid", {"errors": errors, "event": event._asdict()})
-        else:
-            yield event
 
 class WriteFactToBigQuery(WriteToBigQuery):
     """

@@ -12,8 +12,8 @@ from apache_beam.utils.timestamp import Timestamp
 from apache_beam.io import ReadFromPubSub
 from apache_beam.io.fileio import WriteToFiles
 
-from transforms.common import SplitAndCastEventsDoFn, EventDQValidatorDoFn, WriteFactToBigQuery
-from transforms.order import OrderEvent, FactOrderHeader, FactOrderItem
+from transforms.common import SplitAndCastEventsDoFn, WriteFactToBigQuery
+from transforms.order import OrderEvent, OrderEventDQValidatorDoFn, FactOrderHeader, FactOrderItem
 
 logging.getLogger().setLevel(logging.DEBUG)
 
@@ -35,7 +35,7 @@ my_opts = opts.view_as(MyOptions)
 opts.view_as(StandardOptions).streaming = True
 
 def assign_event_time(ev: dict) -> TimestampedValue:
-    timestamp: str = ev['order_date'] or ev['timestamp']
+    timestamp: str = ev.get('order_date', None) or ev.get('timestamp', None)
     timestamp: datetime = datetime.fromisoformat(timestamp)
     timestamp: Timestamp = Timestamp.from_utc_datetime(timestamp)
     return TimestampedValue(ev, timestamp)
@@ -72,11 +72,16 @@ with beam.Pipeline(options=opts) as pipeline:
         events 
         | beam.ParDo(SplitAndCastEventsDoFn()).with_outputs('order', 'inventory', 'unknown')
     )
+    # hints:
+    order: beam.PCollection[OrderEvent]
+
     #
     order, invalid = (
         order 
-        | beam.ParDo(EventDQValidatorDoFn()).with_outputs('invalid', main='main')
+        | beam.ParDo(OrderEventDQValidatorDoFn()).with_outputs('invalid', main='main')
     )
+    # hints:
+    order: beam.PCollection[OrderEvent]
 
     fact_order_header: beam.PCollection[FactOrderHeader] = order | beam.Map(FactOrderHeader.from_event).with_output_types(FactOrderHeader) 
     fact_order_item: beam.PCollection[FactOrderHeader] = order | beam.FlatMap(FactOrderItem.from_event).with_output_types(FactOrderItem)
