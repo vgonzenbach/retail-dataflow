@@ -38,7 +38,6 @@ def make_order_event() -> dict:
 def make_inventory_event() -> dict:
     # quantity_change can be negative (sale/damage) or positive (restock/return)
     reason = random.choice(["restock", "sale", "return", "damage"])
-
     # simple bias: big positive changes mostly for restock, negatives for sale/damage
     if reason in ("restock", "return"):
         quantity_change = random.randint(1, 100)
@@ -54,6 +53,16 @@ def make_inventory_event() -> dict:
         "reason": reason,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
+
+def make_invalid_order_event() -> dict:
+    event = make_order_event()
+    event['status'] = 'lost'
+    return event
+
+def make_invalid_inventory_event() -> dict:
+    event = make_inventory_event()
+    event['reason'] = 'lost'
+    return event
 
 if __name__ == '__main__':
     event = make_order_event()

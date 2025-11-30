@@ -2,7 +2,7 @@ import argparse
 import json
 import logging
 from google.cloud import pubsub_v1
-from data.fake import make_order_event, make_inventory_event
+from data.fake import make_order_event, make_inventory_event, make_invalid_order_event,make_invalid_inventory_event
 
 logger = logging.getLogger(__file__)
 
@@ -24,7 +24,7 @@ if __name__ == '__main__':
         help='Pubsub Topic to which to publish.'
     )
     args  = parser.parse_args()
-    for make_event in (make_order_event, make_inventory_event):
+    for make_event in (make_order_event, make_invalid_order_event, make_inventory_event, make_invalid_inventory_event):
         event: dict = make_event()
         event: str = json.dumps(event, indent=2)
         logger.info(event)

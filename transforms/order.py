@@ -112,6 +112,11 @@ class OrderEventDQValidatorDoFn(DoFn):
             errors.append(f"Value of field 'total_amount' != sum(price * quantity) for all items.")
 
         if errors:
-            yield pvalue.TaggedOutput("invalid", {"errors": errors, "event": event._asdict()})
+            yield pvalue.TaggedOutput(
+                "invalid", 
+                {
+                    "errors": errors,
+                    "event": event._asdict()
+                })
         else:
             yield event

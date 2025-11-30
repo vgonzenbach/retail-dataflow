@@ -26,10 +26,7 @@ class SplitAndCastEventsDoFn(DoFn):
         yield pvalue.TaggedOutput(
             "unknown", 
             {
-                "error": {
-                    "reason": "unknown", 
-                    "errors": ["Value of 'event_type' is unknown."]
-                }, 
+                "errors": ["Value of 'event_type' is unknown."],
                 "event": event
             }
         )

@@ -62,14 +62,15 @@ with beam.Pipeline(options=opts) as pipeline:
         | 'TimestampEvent' >> beam.Map(assign_event_time)
         | 'WindowInto1Min' >> beam.WindowInto(FixedWindows(60))
     )
-    # inventory, user_activity, unknown
+    # split events into their own PCollection via event_type
+    # TODO: do something with unknowns
     order, inventory, unknown = events | beam.ParDo(SplitAndCastEventsDoFn()).with_outputs('order', 'inventory', 'unknown')
     # hints:
     order: beam.PCollection[OrderEvent]
     inventory: beam.PCollection[InventoryEvent]
-    unknow: beam.PCollection[dict]
+    unknown: beam.PCollection[dict]
 
-    #
+    # validate business logic for events
     order, order_invalid = (
         order | beam.ParDo(OrderEventDQValidatorDoFn()).with_outputs('invalid', main='main')
     )
@@ -93,22 +94,17 @@ with beam.Pipeline(options=opts) as pipeline:
             destination=lambda s: json.loads(s)['event_type'],
             file_naming=name_file)
     )
-
-    """
-    for event_type, event in [
-        ('order', order)
-        # TODO: add inventory, user_activity
-    ]:
-        tag = event_type.capitalize()
-        (
-        event
-        | '{tag}ToText' >> beam.Map(json.dumps) #TODO use ToString.Element
-        | '{tag}ToGCS' >> WriteToFiles(
-            path=my_opts.output_gcs,
-            destination='output',
+    
+    ( # write errors
+        (order_invalid, inventory_invalid) 
+        | "MergeInvalid" >> beam.Flatten()
+        | "InvalidToText" >> beam.Map(json.dumps)
+        | "InvalidToGCS" >> WriteToFiles(
+            path=ERROR_PATH + "/invalid",
+            destination=lambda s: json.loads(s).get('event', None).get('event_type', None),
             file_naming=name_file)
+
     )
-    """
     
     # create fact records for BQ
     fact_order_header: beam.PCollection[FactOrderHeader] = (
