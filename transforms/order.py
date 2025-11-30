@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import NamedTuple, List
 from decimal import Decimal
 
-from apache_beam import DoFn
+from apache_beam import DoFn, pvalue
 
 # EVENT Fields
 class OrderShippingAddress(NamedTuple):
@@ -28,17 +28,7 @@ class OrderEvent(NamedTuple):
     shipping_address: OrderShippingAddress
     items: List[OrderItem]
     total_amount: Decimal
-    # N. B. Not a field (do NOT annotate)
-    VALID_STATES = {'pending', 'processing', 'shipped', 'delivered'}
-        
-    def validate(self):
-        errors = []
-        if self.status not in self.VALID_STATES:
-            errors.append(f"Value of field 'status' is not a member of OrderEvent.VALID_STATES={self.VALID_STATES!r}.")
 
-        if self.total_amount != sum(item['price'] * item['quantity'] for item in self.items):
-            errors.append(f"Value of field 'total_amount' != sum(price * quantity) for all items.")
-        return errors
 
 class FactOrderHeader(NamedTuple):
     order_id: str
@@ -107,29 +97,19 @@ class FactOrderItem(NamedTuple):
     def to_dict(self) -> dict:
         return self._asdict()
 
-class ToFactOrderItemDoFn(DoFn):
-    """
-    Splits order events into header and items. 
-    """
-    def process(self, element: dict):
-        """
-        For Items:
-        - add order_id from header
-        - add order_date from header
-        """
-        event: dict = deepcopy(element) # inmutability
-        items = event['items']
-        for item in items:
-            order_dt: datetime = datetime.fromisoformat(event['order_date']) # even
-            order_ts: str = order_dt.isoformat()
-            order_date: str = order_dt.date().isoformat()
-            item_row = item | {
-                'order_id': event['order_id'],
-                'order_date': order_date,
-                'order_ts': order_ts,
-                'quantity': order_ts,
-                'price'
-                'total_amount': int(item['quantity']) * Decimal(item['price']) # add total_amount ($) of the line item
-            }
-            yield item_row
+class OrderEventDQValidatorDoFn(DoFn):
+    def process(self, event: OrderEvent):
+            # N. B. Not a field (do NOT annotate)
+        errors = []
+        valid_states = {'pending', 'processing', 'shipped', 'delivered'}
+        if event.status not in valid_states:
+            errors.append(f"Value of field 'status' is not in set of valid states: {valid_states!r}.")
 
+        computed_total = sum(item['price'] * item['quantity'] for item in event.items)
+        if event.total_amount != computed_total:
+            errors.append(f"Value of field 'total_amount' != sum(price * quantity) for all items.")
+
+        if errors:
+            yield pvalue.TaggedOutput("invalid", {"errors": errors, "event": event._asdict()})
+        else:
+            yield event
