@@ -1,27 +1,27 @@
 from __future__ import annotations
 from typing import Union, ClassVar, Sequence
-from abc import abstractmethod
-from copy import deepcopy
 from apache_beam import DoFn, pvalue
 from apache_beam.io.gcp.bigquery import BigQueryDisposition, WriteToBigQuery
 
 from transforms.order import OrderEvent
  # deprecated
-class SplitEventsByTypeDoFn(DoFn):
-    KNOWN_EVENT_TYPES: ClassVar[Sequence[str]] = ('order', 'inventory', 'user_activity')
+class SplitAndCastEventsDoFn(DoFn):
     """
     Extracts the event_type field from an event and splits into different outputs based on its value.
     """
-    def process(self, element: dict):
-        event: dict = deepcopy(element)
-        event_type = event.pop('event_type', None)
+    def process(self, event: dict):
+        event_type = event.get('event_type', None)
 
-        if event_type not in self.KNOWN_EVENT_TYPES:
-            yield pvalue.TaggedOutput('unknown', {'error': f"'event_type' {event_type!r} is not known. Known event types: {self.KNOWN_EVENT_TYPES}", 'event': event})
-            return
-        print(f"{event_type=!r}")
-        print(f"{event=!r}")
-        yield pvalue.TaggedOutput(event_type, event)
+        if event_type == 'order':
+            yield pvalue.TaggedOutput("order", OrderEvent(**event))
+        """ TODO: Implement additional types
+        elif event_type == 'inventory':
+            yield pvalue.TaggedOutput("inventory", InventoryEvent(**event))
+
+        elif event_type == 'user_activity':
+            yield pvalue.TaggedOutput("user_activity", UserActivityEvent(**event))
+        """
+        yield pvalue.TaggedOutput("unknown", event)
 
 
 class EventDQValidatorDoFn(DoFn):
