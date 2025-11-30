@@ -8,13 +8,11 @@ export GCS_PATH=gs://gymshark-retail-events
 export TEMP_PATH=$GCS_PATH/temp/
 export OUTPUT_PATH=$GCS_PATH/output/
 
-export EVENT_PATH=data/order_event.json
-
 #gcloud config set project $PROJECT_ID
 #gcloud auth application-default set-quota-project $PROJECT_ID
 #gcloud auth application-default login
 
-python3 publish.py --topic=$TOPIC_ID
+# python3 publish.py --topic=$TOPIC_ID
 python3 pipeline.py \
     --project=$PROJECT_ID \
     --region=$REGION \

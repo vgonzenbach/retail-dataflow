@@ -12,14 +12,11 @@ class SplitEventsByTypeDoFn(DoFn):
         event: dict = deepcopy(element)
         event_type = event.pop('event_type', None)
 
-        if not event_type:
-            yield pvalue.TaggedOutput('invalid', {'error': "Event does not contain required field 'event_type'", 'event': event})
-            return 
-
         if event_type not in self.KNOWN_EVENT_TYPES:
-            yield pvalue.TaggedOutput('unknown_type', {'error': f"'event_type' {event_type!r} is not known. Known event types: {self.KNOWN_EVENT_TYPES}", 'event': event})
+            yield pvalue.TaggedOutput('unknown', {'error': f"'event_type' {event_type!r} is not known. Known event types: {self.KNOWN_EVENT_TYPES}", 'event': event})
             return
-
+        print(f"{event_type=!r}")
+        print(f"{event=!r}")
         yield pvalue.TaggedOutput(event_type, event)
 
 
