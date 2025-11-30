@@ -5,7 +5,6 @@ import json
 from datetime import datetime
 
 import apache_beam as beam
-from apache_beam.pvalue import PCollection
 from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions
 from apache_beam.transforms.window import FixedWindows, TimestampedValue
 from apache_beam.utils.timestamp import Timestamp
@@ -14,7 +13,7 @@ from apache_beam.io import ReadFromPubSub
 from apache_beam.io.fileio import WriteToFiles
 
 from transforms.common import SplitEventsByTypeDoFn, WriteFactToBigQuery
-from transforms.order import OrderEvent
+from transforms.order import OrderEvent, FactOrderHeader, FactOrderItem
 
 logging.getLogger().setLevel(logging.DEBUG)
 
@@ -55,9 +54,8 @@ def partition_by_type(event, num_partitions):
         return KNOWN_TYPES.index(T)
     return len(KNOWN_TYPES) - 1
 
-def debug_print(x):
-    print(json.dumps(x, indent=2))
-    return x
+def camelcase(snakecase: str) -> str:
+    return "".join(part.capitalize() for part in snakecase.split("_"))
 
 with beam.Pipeline(options=opts) as pipeline:
 
@@ -86,8 +84,10 @@ with beam.Pipeline(options=opts) as pipeline:
     # events_split = events | 'SplitByType' >> beam.ParDo(SplitEventsByTypeDoFn()).with_outputs('order') # TODO: output other types + unknown
     
     # TEST
-    order: PCollection[OrderEvent] 
-    order | beam.Map(lambda ev: OrderEvent(**ev)).with_output_types(OrderEvent) | beam.Select(event_type=lambda ev: ev.event_type) | beam.Map(print)
+    order: beam.PCollection[OrderEvent] = order | beam.Map(lambda ev: OrderEvent(**ev)).with_output_types(OrderEvent)
+
+    fact_order_header: beam.PCollection[FactOrderHeader] = order | beam.Map(FactOrderHeader.from_event).with_output_types(FactOrderHeader) 
+    fact_order_item: beam.PCollection[FactOrderHeader] = order | beam.FlatMap(FactOrderItem.from_event).with_output_types(FactOrderItem)
 
     #order_split = (
     #    order
@@ -96,5 +96,18 @@ with beam.Pipeline(options=opts) as pipeline:
     #)
     #order_header, order_items = order_split.header, order_split.items
 
-    #order_header | 'WriteOrderHeaderToBQ' >> WriteFactToBigQuery(table='events.fact_order_header')
+    for table, pcoll in [
+        ('fact_order_header', fact_order_header,),
+        ('fact_order_item', fact_order_item),
+    ]:
+        tag = camelcase(table)
+        ( pcoll 
+            | f"{tag}ToDict" >> beam.Map(lambda f: f.to_dict()) 
+            | f"{tag}ToBQ" >> WriteFactToBigQuery(table=f'events.{table}') 
+        )
+
+
+    #    pcoll | f"{tag}ToDict" >> beam.Map(lambda f: f.to_dict()) 
+    #    | 'WriteOrderHeaderToBQ' >> WriteFactToBigQuery(table='events.fact_order_header')
+    #fact_order_item | "ToItemDict" >> beam.Map(lamda)
     # order_items | 'WriteOrderItemsToBQ' >> WriteFactToBigQuery(table='events.fact_order_items')

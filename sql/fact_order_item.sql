@@ -1,6 +1,6 @@
 -- the purpose of this table is to store item-level details for use in product-centric analytics
 -- in conjunction with a hypothetical dim_product table or the given fact_inventory table
-CREATE TABLE IF NOT EXISTS events.fact_order_items (
+CREATE TABLE IF NOT EXISTS events.fact_order_item (
     order_id STRING,
     order_date DATE,
     order_ts TIMESTAMP,
