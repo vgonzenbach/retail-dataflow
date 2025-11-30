@@ -98,7 +98,7 @@ class FactOrderItem(NamedTuple):
 
 class OrderEventDQValidatorDoFn(DoFn):
     def process(self, event: OrderEvent):
-            # N. B. Not a field (do NOT annotate)
+        # N. B. Not a field (do NOT annotate)
         errors = []
         valid_states = {'pending', 'processing', 'shipped', 'delivered'}
         if event.status not in valid_states:

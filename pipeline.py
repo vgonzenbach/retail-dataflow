@@ -14,6 +14,7 @@ from apache_beam.io.fileio import WriteToFiles
 
 from transforms.common import SplitAndCastEventsDoFn, WriteFactToBigQuery
 from transforms.order import OrderEvent, OrderEventDQValidatorDoFn, FactOrderHeader, FactOrderItem
+from transforms.inventory import InventoryEvent, InventoryEventDQValidatorDoFn
 
 logging.getLogger().setLevel(logging.DEBUG)
 
@@ -68,20 +69,21 @@ with beam.Pipeline(options=opts) as pipeline:
             file_naming=name_file)
     )
     # inventory, user_activity, unknown
-    order, inventory, unknown = (
-        events 
-        | beam.ParDo(SplitAndCastEventsDoFn()).with_outputs('order', 'inventory', 'unknown')
-    )
+    order, inventory, unknown = events | beam.ParDo(SplitAndCastEventsDoFn()).with_outputs('order', 'inventory', 'unknown')
     # hints:
     order: beam.PCollection[OrderEvent]
-
+    inventory: beam.PCollection[InventoryEvent]
+    
     #
-    order, invalid = (
-        order 
-        | beam.ParDo(OrderEventDQValidatorDoFn()).with_outputs('invalid', main='main')
+    order, invalid_order = (
+        order | beam.ParDo(OrderEventDQValidatorDoFn()).with_outputs('invalid', main='main')
+    )
+    inventory, invalid_inventory = (
+        inventory | beam.ParDo(InventoryEventDQValidatorDoFn()).with_outputs('invalid', main='main')
     )
     # hints:
     order: beam.PCollection[OrderEvent]
+    inventory: beam.PCollection[InventoryEvent]
 
     fact_order_header: beam.PCollection[FactOrderHeader] = order | beam.Map(FactOrderHeader.from_event).with_output_types(FactOrderHeader) 
     fact_order_item: beam.PCollection[FactOrderHeader] = order | beam.FlatMap(FactOrderItem.from_event).with_output_types(FactOrderItem)
