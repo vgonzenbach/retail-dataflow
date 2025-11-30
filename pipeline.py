@@ -92,18 +92,18 @@ with beam.Pipeline(options=opts) as pipeline:
     fact_order_item: beam.PCollection[FactOrderHeader] = (
         order | "ToOrderItemFact" >> beam.FlatMap(FactOrderItem.from_event).with_output_types(FactOrderItem)
     )
-    fact_inventory: beam.PCollection[FactOrderHeader] = (
+    fact_inventory: beam.PCollection[FactInventory] = (
         inventory | "ToInventoryFact" >>beam.Map(FactInventory.from_event).with_output_types(FactInventory)
     )
-    fact_inventory | beam.Map(print)
 
     # write to BQ
-    for table, pcoll in [
+    for table, fact in [
         ('fact_order_header', fact_order_header,),
         ('fact_order_item', fact_order_item),
+        ('fact_inventory', fact_inventory)
     ]:
         tag = camelcase(table)
-        ( pcoll 
+        ( fact 
             | f"{tag}ToDict" >> beam.Map(lambda f: f._asdict()) 
             | f"{tag}ToBQ" >> WriteFactToBigQuery(table=f'events.{table}') 
         )
