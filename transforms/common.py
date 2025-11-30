@@ -1,8 +1,12 @@
-from typing import ClassVar, Sequence
+from __future__ import annotations
+from typing import Union, ClassVar, Sequence
+from abc import abstractmethod
 from copy import deepcopy
 from apache_beam import DoFn, pvalue
 from apache_beam.io.gcp.bigquery import BigQueryDisposition, WriteToBigQuery
 
+from transforms.order import OrderEvent
+ # deprecated
 class SplitEventsByTypeDoFn(DoFn):
     KNOWN_EVENT_TYPES: ClassVar[Sequence[str]] = ('order', 'inventory', 'user_activity')
     """
@@ -19,6 +23,16 @@ class SplitEventsByTypeDoFn(DoFn):
         print(f"{event=!r}")
         yield pvalue.TaggedOutput(event_type, event)
 
+
+class DQEvent(DoFn):
+    def process(self, event: Union[OrderEvent, "InventoryEvent", "UserActivityEvent"]):
+        errors = event.validate()
+        if errors:
+            yield pvalue.TaggedOutput(
+                "invalid", {"errors": errors, "event": event._asdict()}
+            )
+        else:
+            yield event
 
 class WriteFactToBigQuery(WriteToBigQuery):
     """

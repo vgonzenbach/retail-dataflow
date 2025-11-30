@@ -102,7 +102,7 @@ with beam.Pipeline(options=opts) as pipeline:
     ]:
         tag = camelcase(table)
         ( pcoll 
-            | f"{tag}ToDict" >> beam.Map(lambda f: f.to_dict()) 
+            | f"{tag}ToDict" >> beam.Map(lambda f: f._asdict()) 
             | f"{tag}ToBQ" >> WriteFactToBigQuery(table=f'events.{table}') 
         )
 

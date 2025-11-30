@@ -1,36 +1,43 @@
 from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timezone
-from dataclasses import dataclass
 from typing import NamedTuple, List
 from decimal import Decimal
 
 from apache_beam import DoFn
-#from apache_beam.coders import RowCoder
-#from apache_beam.coders.registry import register_coder # register_coder(ShippingAdress, RowCoder)
 
-# TODO: create status enum
-
-class ShippingAddress(NamedTuple):
+# EVENT Fields
+class OrderShippingAddress(NamedTuple):
     street: str
     city: str
     country: str
 
-class Item:
+class OrderItem:
     product_id: str
     product_name: str
     quantity: int
     price: Decimal
 
+# Event schemas
 class OrderEvent(NamedTuple):
     event_type: str
     order_id: str
     order_date: str
     customer_id: str
     status: str
-    shipping_address: ShippingAddress
-    items: List[Item]
+    shipping_address: OrderShippingAddress
+    items: List[OrderItem]
     total_amount: Decimal
+    # N. B. Not a field (do NOT annotate)
+    VALID_STATES = {'pending', 'processing', 'shipped', 'delivered'}
+        
+    def validate(self):
+        errors = []
+        if self.status not in self.VALID_STATES:
+            errors.append(f"Value of field 'status' is not a member of OrderEvent.VALID_STATES={self.VALID_STATES!r}.")
+
+        if self.total_amount != sum(item['price'] * item['quantity'] for item in self.items):
+            errors.append(f"Value of field 'total_amount' != sum(price * quantity) for all items.")
 
 class FactOrderHeader(NamedTuple):
     order_id: str
@@ -65,9 +72,6 @@ class FactOrderHeader(NamedTuple):
             shipping_address_country    =   ev.shipping_address['country'],
             total_amount                =   ev.total_amount,
         )
-
-    def to_dict(self) -> dict:
-        return self._asdict()
 
 
 class FactOrderItem(NamedTuple):
