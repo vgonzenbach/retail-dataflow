@@ -1,10 +1,7 @@
 from __future__ import annotations
-from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import NamedTuple, List
 from decimal import Decimal
-
-from apache_beam import DoFn
 
 # EVENT Fields
 class OrderShippingAddress(NamedTuple):
@@ -106,30 +103,3 @@ class FactOrderItem(NamedTuple):
 
     def to_dict(self) -> dict:
         return self._asdict()
-
-class ToFactOrderItemDoFn(DoFn):
-    """
-    Splits order events into header and items. 
-    """
-    def process(self, element: dict):
-        """
-        For Items:
-        - add order_id from header
-        - add order_date from header
-        """
-        event: dict = deepcopy(element) # inmutability
-        items = event['items']
-        for item in items:
-            order_dt: datetime = datetime.fromisoformat(event['order_date']) # even
-            order_ts: str = order_dt.isoformat()
-            order_date: str = order_dt.date().isoformat()
-            item_row = item | {
-                'order_id': event['order_id'],
-                'order_date': order_date,
-                'order_ts': order_ts,
-                'quantity': order_ts,
-                'price'
-                'total_amount': int(item['quantity']) * Decimal(item['price']) # add total_amount ($) of the line item
-            }
-            yield item_row
-

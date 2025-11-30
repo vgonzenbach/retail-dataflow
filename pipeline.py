@@ -68,9 +68,9 @@ with beam.Pipeline(options=opts) as pipeline:
             file_naming=name_file)
     )
     # inventory, user_activity, unknown
-    order, unknown = (
+    order, inventory, unknown = (
         events 
-        | beam.ParDo(SplitAndCastEventsDoFn()).with_outputs('order', 'invalid')
+        | beam.ParDo(SplitAndCastEventsDoFn()).with_outputs('order', 'inventory', 'unknown')
     )
     #
     order, invalid = (

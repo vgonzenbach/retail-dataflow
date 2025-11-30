@@ -4,7 +4,9 @@ from apache_beam import DoFn, pvalue
 from apache_beam.io.gcp.bigquery import BigQueryDisposition, WriteToBigQuery
 
 from transforms.order import OrderEvent
- # deprecated
+from transforms.inventory import InventoryEvent
+
+
 class SplitAndCastEventsDoFn(DoFn):
     """
     Extracts the event_type field from an event and splits into different outputs based on its value.
@@ -14,10 +16,11 @@ class SplitAndCastEventsDoFn(DoFn):
 
         if event_type == 'order':
             yield pvalue.TaggedOutput("order", OrderEvent(**event))
-        """ TODO: Implement additional types
+
         elif event_type == 'inventory':
             yield pvalue.TaggedOutput("inventory", InventoryEvent(**event))
-
+        
+        """ TODO: Implement additional types
         elif event_type == 'user_activity':
             yield pvalue.TaggedOutput("user_activity", UserActivityEvent(**event))
         """
