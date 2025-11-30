@@ -21,14 +21,32 @@ class SplitAndCastEventsDoFn(DoFn):
         elif event_type == 'user_activity':
             yield pvalue.TaggedOutput("user_activity", UserActivityEvent(**event))
         """
-        yield pvalue.TaggedOutput("unknown", event)
+        yield pvalue.TaggedOutput(
+            "unknown", 
+            {
+                "error": {
+                    "reason": "unknown", 
+                    "errors": ["Value of 'event_type' is unknown."]
+                }, 
+                "event": event
+            }
+        )
 
 
 class EventDQValidatorDoFn(DoFn):
     def process(self, event: Union[OrderEvent, "InventoryEvent", "UserActivityEvent"]):
         errors = event.validate()
         if errors:
-            yield pvalue.TaggedOutput("invalid", {"errors": errors, "event": event._asdict()})
+            yield pvalue.TaggedOutput(
+                "invalid", 
+                {
+                    "error": {
+                        "reason": "invalid", 
+                        "errors": errors
+                    }, 
+                    "event": event._asdict()
+                }
+            )
         else:
             yield event
 

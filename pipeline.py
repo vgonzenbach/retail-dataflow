@@ -28,7 +28,7 @@ class MyOptions(PipelineOptions):
             '--output_gcs',
             dest='output_gcs',
             required=True,
-            help='Output file to write results to.')
+            help='GCS Bucket to write results to.')
 # set options
 opts = PipelineOptions()
 my_opts = opts.view_as(MyOptions)
@@ -39,6 +39,9 @@ def assign_event_time(ev: dict) -> TimestampedValue:
     timestamp: datetime = datetime.fromisoformat(timestamp)
     timestamp: Timestamp = Timestamp.from_utc_datetime(timestamp)
     return TimestampedValue(ev, timestamp)
+
+def build_output_destination(event):
+    return
 
 def name_file(window, pane, shard_index, total_shards, compression, destination):
     timestamp: datetime = window.start.to_utc_datetime()
@@ -56,38 +59,46 @@ with beam.Pipeline(options=opts) as pipeline:
         | 'ReadPubSub' >> ReadFromPubSub(subscription=my_opts.input_subscription)
         | 'ParseJSON' >> beam.Map(lambda b: json.loads(b.decode('utf-8')))
         | 'TimestampEvent' >> beam.Map(assign_event_time)
+        | 'WindowInto1Min' >> beam.WindowInto(FixedWindows(60))
     )
 
-    ( # write raw events to GCS
-        events
-        | 'WindowInto1Min' >> beam.WindowInto(FixedWindows(60))
-        | 'ToText' >> beam.Map(json.dumps) #TODO use ToString.Element
-        | 'WriteToGCS' >> WriteToFiles(
-            path=my_opts.output_gcs,
-            destination=lambda ev: json.loads(ev)['event_type'],
-            file_naming=name_file)
-    )
-    # inventory, user_activity, unknown
-    order, unknown = (
+    # split events into typed events according to event['event_type']
+    # TODO: add inventory, user_activity
+    order, unknown = ( # unknown types are stored in a side output
         events 
-        | beam.ParDo(SplitAndCastEventsDoFn()).with_outputs('order', 'invalid')
+        | beam.ParDo(SplitAndCastEventsDoFn()).with_outputs('order', 'unknown')
     )
-    #
+    # verify business logic for events
     order, invalid = (
         order 
         | beam.ParDo(EventDQValidatorDoFn()).with_outputs('invalid', main='main')
     )
 
+    # write valid events to output/
+    for event_type, event in [
+        ('order', order)
+        # TODO: add inventory, user_activity
+    ]:
+        tag = event_type.capitalize()
+        (
+        event
+        | '{tag}ToText' >> beam.Map(json.dumps) #TODO use ToString.Element
+        | '{tag}ToGCS' >> WriteToFiles(
+            path=my_opts.output_gcs,
+            destination='output',
+            file_naming=name_file)
+    )
+    
     fact_order_header: beam.PCollection[FactOrderHeader] = order | beam.Map(FactOrderHeader.from_event).with_output_types(FactOrderHeader) 
     fact_order_item: beam.PCollection[FactOrderHeader] = order | beam.FlatMap(FactOrderItem.from_event).with_output_types(FactOrderItem)
 
     # write to BQ
-    for table, pcoll in [
+    for table, fact in [
         ('fact_order_header', fact_order_header,),
         ('fact_order_item', fact_order_item),
     ]:
         tag = camelcase(table)
-        ( pcoll 
+        ( fact 
             | f"{tag}ToDict" >> beam.Map(lambda f: f._asdict()) 
             | f"{tag}ToBQ" >> WriteFactToBigQuery(table=f'events.{table}') 
         )
