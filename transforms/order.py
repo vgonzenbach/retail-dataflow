@@ -1,7 +1,10 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import NamedTuple, List
-from decimal import Decimal
+from decimal import Decimal, getcontext
+
+# set decimal precision
+getcontext().prec = 2
 
 from apache_beam import DoFn, pvalue
 
@@ -89,8 +92,8 @@ class FactOrderItem(NamedTuple):
                 product_id      =   item['product_id'],
                 product_name    =   item['product_name'],
                 quantity        =   item['quantity'],
-                price           =   item['price'],
-                total_amount    =   item['quantity'] * item['price']
+                price           =   Decimal(item['price']).quantize(Decimal("0.01")),
+                total_amount    =   Decimal(item['quantity']) * Decimal(item['price']).quantize(Decimal("0.01"))
             ) 
 
     def to_dict(self) -> dict:

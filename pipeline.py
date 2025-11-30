@@ -35,14 +35,14 @@ opts = PipelineOptions()
 my_opts = opts.view_as(MyOptions)
 opts.view_as(StandardOptions).streaming = True
 
+OUTPUT_PATH = my_opts.output_gcs + "/output"
+ERROR_PATH = my_opts.output_gcs + "/errors"
+
 def assign_event_time(ev: dict) -> TimestampedValue:
     timestamp: str = ev.get('order_date', None) or ev.get('timestamp', None)
     timestamp: datetime = datetime.fromisoformat(timestamp)
     timestamp: Timestamp = Timestamp.from_utc_datetime(timestamp)
     return TimestampedValue(ev, timestamp)
-
-def build_output_destination(event):
-    return
 
 def name_file(window, pane, shard_index, total_shards, compression, destination):
     timestamp: datetime = window.start.to_utc_datetime()
@@ -67,19 +67,34 @@ with beam.Pipeline(options=opts) as pipeline:
     # hints:
     order: beam.PCollection[OrderEvent]
     inventory: beam.PCollection[InventoryEvent]
-    
+    unknow: beam.PCollection[dict]
+
     #
-    order, invalid_order = (
+    order, order_invalid = (
         order | beam.ParDo(OrderEventDQValidatorDoFn()).with_outputs('invalid', main='main')
     )
-    inventory, invalid_inventory = (
+    inventory, inventory_invalid = (
         inventory | beam.ParDo(InventoryEventDQValidatorDoFn()).with_outputs('invalid', main='main')
     )
     # hints:
     order: beam.PCollection[OrderEvent]
     inventory: beam.PCollection[InventoryEvent]
+    order_invalid: beam.PCollection[dict]
+    inventory_invalid: beam.PCollection[dict]
 
     # write valid events to output/
+    (
+        (order, inventory)
+        | "MergeValidatedEvents" >> beam.Flatten()
+        | "ValidatedEventsToDict" >> beam.Map(lambda ev: ev._asdict())
+        | "ValidatedEventsToText" >> beam.Map(json.dumps)
+        | "ValidateEventsToGCS" >> WriteToFiles(
+            path=OUTPUT_PATH,
+            destination=lambda s: json.loads(s)['event_type'],
+            file_naming=name_file)
+    )
+
+    """
     for event_type, event in [
         ('order', order)
         # TODO: add inventory, user_activity
@@ -93,6 +108,7 @@ with beam.Pipeline(options=opts) as pipeline:
             destination='output',
             file_naming=name_file)
     )
+    """
     
     # create fact records for BQ
     fact_order_header: beam.PCollection[FactOrderHeader] = (

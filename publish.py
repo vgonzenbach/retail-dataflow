@@ -24,8 +24,9 @@ if __name__ == '__main__':
         help='Pubsub Topic to which to publish.'
     )
     args  = parser.parse_args()
-    event: dict = make_inventory_event()
-    event: str = json.dumps(event, indent=2)
-    logger.info(event)
-    event: bytes = bytes(event, encoding='utf-8')
-    publish_event(topic=args.topic, data=event)
+    for make_event in (make_order_event, make_inventory_event):
+        event: dict = make_event()
+        event: str = json.dumps(event, indent=2)
+        logger.info(event)
+        event: bytes = bytes(event, encoding='utf-8')
+        publish_event(topic=args.topic, data=event)
