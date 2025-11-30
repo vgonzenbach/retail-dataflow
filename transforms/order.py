@@ -1,6 +1,5 @@
 from __future__ import annotations
-from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import NamedTuple, List
 from decimal import Decimal
 
@@ -99,7 +98,7 @@ class FactOrderItem(NamedTuple):
 
 class OrderEventDQValidatorDoFn(DoFn):
     def process(self, event: OrderEvent):
-            # N. B. Not a field (do NOT annotate)
+        # N. B. Not a field (do NOT annotate)
         errors = []
         valid_states = {'pending', 'processing', 'shipped', 'delivered'}
         if event.status not in valid_states:

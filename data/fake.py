@@ -35,6 +35,26 @@ def make_order_event() -> dict:
         "total_amount": round(total_amount, 2),
     }
 
+def make_inventory_event() -> dict:
+    # quantity_change can be negative (sale/damage) or positive (restock/return)
+    reason = random.choice(["restock", "sale", "return", "damage"])
+
+    # simple bias: big positive changes mostly for restock, negatives for sale/damage
+    if reason in ("restock", "return"):
+        quantity_change = random.randint(1, 100)
+    elif reason in ("sale", "damage"):
+        quantity_change = random.randint(1, 100) * -1 
+
+    return {
+        "event_type": "inventory",
+        "inventory_id": str(uuid.uuid4()),
+        "product_id": str(uuid.uuid4()),
+        "warehouse_id": str(uuid.uuid4()),
+        "quantity_change": quantity_change,
+        "reason": reason,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
 if __name__ == '__main__':
     event = make_order_event()
     print(event)
