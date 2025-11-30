@@ -1,8 +1,8 @@
-"""Produced by ChatGPT"""
+"""Produced with assistance from ChatGPT"""
 from faker import Faker
 import random
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 
 fake = Faker()
 
@@ -24,7 +24,7 @@ def make_order_event() -> dict:
         "event_type": "order",
         "order_id": str(uuid.uuid4()),
         "customer_id": str(uuid.uuid4()),
-        "order_date": fake.date_time_between(start_date="-30d", end_date="now").isoformat(),
+        "order_date": datetime.now(timezone.utc).isoformat(),
         "status": random.choice(["pending", "processing", "shipped", "delivered"]),
         "items": items,
         "shipping_address": {
