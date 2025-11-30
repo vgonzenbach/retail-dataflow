@@ -38,6 +38,7 @@ class OrderEvent(NamedTuple):
 
         if self.total_amount != sum(item['price'] * item['quantity'] for item in self.items):
             errors.append(f"Value of field 'total_amount' != sum(price * quantity) for all items.")
+        return errors
 
 class FactOrderHeader(NamedTuple):
     order_id: str

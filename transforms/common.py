@@ -24,13 +24,11 @@ class SplitEventsByTypeDoFn(DoFn):
         yield pvalue.TaggedOutput(event_type, event)
 
 
-class DQEvent(DoFn):
+class EventDQValidatorDoFn(DoFn):
     def process(self, event: Union[OrderEvent, "InventoryEvent", "UserActivityEvent"]):
         errors = event.validate()
         if errors:
-            yield pvalue.TaggedOutput(
-                "invalid", {"errors": errors, "event": event._asdict()}
-            )
+            yield pvalue.TaggedOutput("invalid", {"errors": errors, "event": event._asdict()})
         else:
             yield event
 

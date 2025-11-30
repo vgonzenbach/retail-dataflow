@@ -12,7 +12,7 @@ from apache_beam.utils.timestamp import Timestamp
 from apache_beam.io import ReadFromPubSub
 from apache_beam.io.fileio import WriteToFiles
 
-from transforms.common import SplitEventsByTypeDoFn, WriteFactToBigQuery
+from transforms.common import EventDQValidatorDoFn, WriteFactToBigQuery
 from transforms.order import OrderEvent, FactOrderHeader, FactOrderItem
 
 logging.getLogger().setLevel(logging.DEBUG)
@@ -66,36 +66,29 @@ with beam.Pipeline(options=opts) as pipeline:
         | 'TimestampEvent' >> beam.Map(assign_event_time)
     )
 
-#    ( # write raw events to GCS
-#        events
-#        | 'WindowInto1Min' >> beam.WindowInto(FixedWindows(60))
-#        | 'ToText' >> beam.Map(json.dumps) #TODO use ToString.Element
-#        | 'WriteToGCS' >> WriteToFiles(
-#            path=my_opts.output_gcs,
-#            destination=lambda ev: json.loads(ev)['event_type'],
-#            file_naming=name_file)
-#    )
-    # TEST
-    # events | beam.Map(debug_print)
-    order, inventory, user_activity, unknown = events | beam.Partition(partition_by_type, len(KNOWN_TYPES))
-        #| beam.ParDo(SplitEventsByTypeDoFn()).with_outputs('inventory', 'user_activity', main='order')
+    ( # write raw events to GCS
+        events
+        | 'WindowInto1Min' >> beam.WindowInto(FixedWindows(60))
+        | 'ToText' >> beam.Map(json.dumps) #TODO use ToString.Element
+        | 'WriteToGCS' >> WriteToFiles(
+            path=my_opts.output_gcs,
+            destination=lambda ev: json.loads(ev)['event_type'],
+            file_naming=name_file)
+    )
 
-    # split events by type for later validation + ingestion
-    # events_split = events | 'SplitByType' >> beam.ParDo(SplitEventsByTypeDoFn()).with_outputs('order') # TODO: output other types + unknown
-    
-    # TEST
-    order: beam.PCollection[OrderEvent] = order | beam.Map(lambda ev: OrderEvent(**ev)).with_output_types(OrderEvent)
+    order, inventory, user_activity, unknown = events | beam.Partition(partition_by_type, len(KNOWN_TYPES))
+   
+    #
+    order, invalid_order = (
+        order 
+        | beam.Map(lambda ev: OrderEvent(**ev)).with_output_types(OrderEvent)
+        | beam.ParDo(EventDQValidatorDoFn()).with_outputs('invalid', main='main')
+    )
 
     fact_order_header: beam.PCollection[FactOrderHeader] = order | beam.Map(FactOrderHeader.from_event).with_output_types(FactOrderHeader) 
     fact_order_item: beam.PCollection[FactOrderHeader] = order | beam.FlatMap(FactOrderItem.from_event).with_output_types(FactOrderItem)
 
-    #order_split = (
-    #    order
-    #    | ''
-    #    | 'SplitOrderEvents' >> beam.ParDo(SplitOrderDoFn()).with_outputs('items', 'header')
-    #)
-    #order_header, order_items = order_split.header, order_split.items
-
+    # write to BQ
     for table, pcoll in [
         ('fact_order_header', fact_order_header,),
         ('fact_order_item', fact_order_item),
@@ -105,9 +98,3 @@ with beam.Pipeline(options=opts) as pipeline:
             | f"{tag}ToDict" >> beam.Map(lambda f: f._asdict()) 
             | f"{tag}ToBQ" >> WriteFactToBigQuery(table=f'events.{table}') 
         )
-
-
-    #    pcoll | f"{tag}ToDict" >> beam.Map(lambda f: f.to_dict()) 
-    #    | 'WriteOrderHeaderToBQ' >> WriteFactToBigQuery(table='events.fact_order_header')
-    #fact_order_item | "ToItemDict" >> beam.Map(lamda)
-    # order_items | 'WriteOrderItemsToBQ' >> WriteFactToBigQuery(table='events.fact_order_items')
