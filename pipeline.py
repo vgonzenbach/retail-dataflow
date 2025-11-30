@@ -14,7 +14,7 @@ from apache_beam.io.fileio import WriteToFiles
 
 from transforms.common import SplitAndCastEventsDoFn, WriteFactToBigQuery
 from transforms.order import OrderEvent, OrderEventDQValidatorDoFn, FactOrderHeader, FactOrderItem
-from transforms.inventory import InventoryEvent, InventoryEventDQValidatorDoFn
+from transforms.inventory import InventoryEvent, InventoryEventDQValidatorDoFn, FactInventory
 
 logging.getLogger().setLevel(logging.DEBUG)
 
@@ -85,8 +85,17 @@ with beam.Pipeline(options=opts) as pipeline:
     order: beam.PCollection[OrderEvent]
     inventory: beam.PCollection[InventoryEvent]
 
-    fact_order_header: beam.PCollection[FactOrderHeader] = order | beam.Map(FactOrderHeader.from_event).with_output_types(FactOrderHeader) 
-    fact_order_item: beam.PCollection[FactOrderHeader] = order | beam.FlatMap(FactOrderItem.from_event).with_output_types(FactOrderItem)
+    # create fact records for BQ
+    fact_order_header: beam.PCollection[FactOrderHeader] = (
+        order | "ToOrderHeaderFact" >> beam.Map(FactOrderHeader.from_event).with_output_types(FactOrderHeader) 
+    )
+    fact_order_item: beam.PCollection[FactOrderHeader] = (
+        order | "ToOrderItemFact" >> beam.FlatMap(FactOrderItem.from_event).with_output_types(FactOrderItem)
+    )
+    fact_inventory: beam.PCollection[FactOrderHeader] = (
+        inventory | "ToInventoryFact" >>beam.Map(FactInventory.from_event).with_output_types(FactInventory)
+    )
+    fact_inventory | beam.Map(print)
 
     # write to BQ
     for table, pcoll in [

@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import NamedTuple
+from datetime import datetime
 
 from apache_beam import DoFn, pvalue
 
@@ -11,7 +12,6 @@ class InventoryEvent(NamedTuple):
     quantity_change: int
     reason: str
     timestamp: str
-
 
 class InventoryEventDQValidatorDoFn(DoFn):
     def process(self, event: InventoryEvent):
@@ -28,4 +28,28 @@ class InventoryEventDQValidatorDoFn(DoFn):
             yield pvalue.TaggedOutput("invalid", {"errors": errors, "event": event._asdict()})
         else:
             yield event
+
+class FactInventory(NamedTuple):
+    inventory_id: str
+    product_id: str
+    warehouse_id: str
+    quantity_change: int
+    reason: str
+    event_date: str
+    event_timestamp: str
+
+    @staticmethod
+    def from_event(ev: InventoryEvent):
+        event_dt: datetime = datetime.fromisoformat(ev.timestamp)
+        event_ts: str = event_dt.isoformat()
+        event_date: str = event_dt.date().isoformat()
+        return FactInventory(
+            inventory_id    = ev.inventory_id,
+            product_id      = ev.product_id,
+            warehouse_id    = ev.warehouse_id,
+            quantity_change = ev.quantity_change,
+            reason          = ev.reason,
+            event_date      = event_date,
+            event_timestamp = event_ts
+        )
         
