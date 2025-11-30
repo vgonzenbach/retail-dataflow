@@ -25,7 +25,12 @@ class InventoryEventDQValidatorDoFn(DoFn):
             errors.append(f"Value of field 'quantity_change' is not within range [-100, 100]")
         
         if errors:
-            yield pvalue.TaggedOutput("invalid", {"errors": errors, "event": event._asdict()})
+            yield pvalue.TaggedOutput(
+                "invalid", 
+                {
+                    "errors": errors, 
+                    "event": event._asdict()
+                })
         else:
             yield event
 

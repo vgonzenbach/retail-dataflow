@@ -1,7 +1,10 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import NamedTuple, List
-from decimal import Decimal
+from decimal import Decimal, getcontext
+
+# set decimal precision
+getcontext().prec = 2
 
 from apache_beam import DoFn, pvalue
 
@@ -89,8 +92,8 @@ class FactOrderItem(NamedTuple):
                 product_id      =   item['product_id'],
                 product_name    =   item['product_name'],
                 quantity        =   item['quantity'],
-                price           =   item['price'],
-                total_amount    =   item['quantity'] * item['price']
+                price           =   Decimal(item['price']).quantize(Decimal("0.01")),
+                total_amount    =   Decimal(item['quantity']) * Decimal(item['price']).quantize(Decimal("0.01"))
             ) 
 
     def to_dict(self) -> dict:
@@ -109,6 +112,11 @@ class OrderEventDQValidatorDoFn(DoFn):
             errors.append(f"Value of field 'total_amount' != sum(price * quantity) for all items.")
 
         if errors:
-            yield pvalue.TaggedOutput("invalid", {"errors": errors, "event": event._asdict()})
+            yield pvalue.TaggedOutput(
+                "invalid", 
+                {
+                    "errors": errors,
+                    "event": event._asdict()
+                })
         else:
             yield event

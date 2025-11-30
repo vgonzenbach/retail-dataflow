@@ -23,7 +23,13 @@ class SplitAndCastEventsDoFn(DoFn):
         elif event_type == 'user_activity':
             yield pvalue.TaggedOutput("user_activity", UserActivityEvent(**event))
         """
-        yield pvalue.TaggedOutput("unknown", event)
+        yield pvalue.TaggedOutput(
+            "unknown", 
+            {
+                "errors": ["Value of 'event_type' is unknown."],
+                "event": event
+            }
+        )
 
 
 class WriteFactToBigQuery(WriteToBigQuery):

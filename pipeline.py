@@ -29,11 +29,14 @@ class MyOptions(PipelineOptions):
             '--output_gcs',
             dest='output_gcs',
             required=True,
-            help='Output file to write results to.')
+            help='GCS Bucket to write results to.')
 # set options
 opts = PipelineOptions()
 my_opts = opts.view_as(MyOptions)
 opts.view_as(StandardOptions).streaming = True
+
+OUTPUT_PATH = my_opts.output_gcs + "/output"
+ERROR_PATH = my_opts.output_gcs + "/errors"
 
 def assign_event_time(ev: dict) -> TimestampedValue:
     timestamp: str = ev.get('order_date', None) or ev.get('timestamp', None)
@@ -57,34 +60,52 @@ with beam.Pipeline(options=opts) as pipeline:
         | 'ReadPubSub' >> ReadFromPubSub(subscription=my_opts.input_subscription)
         | 'ParseJSON' >> beam.Map(lambda b: json.loads(b.decode('utf-8')))
         | 'TimestampEvent' >> beam.Map(assign_event_time)
-    )
-
-    ( # write raw events to GCS
-        events
         | 'WindowInto1Min' >> beam.WindowInto(FixedWindows(60))
-        | 'ToText' >> beam.Map(json.dumps) #TODO use ToString.Element
-        | 'WriteToGCS' >> WriteToFiles(
-            path=my_opts.output_gcs,
-            destination=lambda ev: json.loads(ev)['event_type'],
-            file_naming=name_file)
     )
-    # inventory, user_activity, unknown
+    # split events into their own PCollection via event_type
+    # TODO: do something with unknowns
     order, inventory, unknown = events | beam.ParDo(SplitAndCastEventsDoFn()).with_outputs('order', 'inventory', 'unknown')
     # hints:
     order: beam.PCollection[OrderEvent]
     inventory: beam.PCollection[InventoryEvent]
-    
-    #
-    order, invalid_order = (
+    unknown: beam.PCollection[dict]
+
+    # validate business logic for events
+    order, order_invalid = (
         order | beam.ParDo(OrderEventDQValidatorDoFn()).with_outputs('invalid', main='main')
     )
-    inventory, invalid_inventory = (
+    inventory, inventory_invalid = (
         inventory | beam.ParDo(InventoryEventDQValidatorDoFn()).with_outputs('invalid', main='main')
     )
     # hints:
     order: beam.PCollection[OrderEvent]
     inventory: beam.PCollection[InventoryEvent]
+    order_invalid: beam.PCollection[dict]
+    inventory_invalid: beam.PCollection[dict]
 
+    # write valid events to output/
+    (
+        (order, inventory)
+        | "MergeValidatedEvents" >> beam.Flatten()
+        | "ValidatedEventsToDict" >> beam.Map(lambda ev: ev._asdict())
+        | "ValidatedEventsToText" >> beam.Map(json.dumps)
+        | "ValidateEventsToGCS" >> WriteToFiles(
+            path=OUTPUT_PATH,
+            destination=lambda s: json.loads(s)['event_type'],
+            file_naming=name_file)
+    )
+    
+    ( # write errors
+        (order_invalid, inventory_invalid) 
+        | "MergeInvalid" >> beam.Flatten()
+        | "InvalidToText" >> beam.Map(json.dumps)
+        | "InvalidToGCS" >> WriteToFiles(
+            path=ERROR_PATH + "/invalid",
+            destination=lambda s: json.loads(s).get('event', None).get('event_type', None),
+            file_naming=name_file)
+
+    )
+    
     # create fact records for BQ
     fact_order_header: beam.PCollection[FactOrderHeader] = (
         order | "ToOrderHeaderFact" >> beam.Map(FactOrderHeader.from_event).with_output_types(FactOrderHeader) 
