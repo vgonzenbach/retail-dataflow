@@ -12,8 +12,9 @@ from apache_beam.utils.timestamp import Timestamp
 from apache_beam.io import ReadFromPubSub
 from apache_beam.io.fileio import WriteToFiles
 
-from transforms.common import SplitAndCastEventsDoFn, EventDQValidatorDoFn, WriteFactToBigQuery
-from transforms.order import OrderEvent, FactOrderHeader, FactOrderItem
+from transforms.common import SplitAndCastEventsDoFn, WriteFactToBigQuery
+from transforms.order import OrderEvent, OrderEventDQValidatorDoFn, FactOrderHeader, FactOrderItem
+from transforms.inventory import InventoryEvent, InventoryEventDQValidatorDoFn, FactInventory
 
 logging.getLogger().setLevel(logging.DEBUG)
 
@@ -35,7 +36,7 @@ my_opts = opts.view_as(MyOptions)
 opts.view_as(StandardOptions).streaming = True
 
 def assign_event_time(ev: dict) -> TimestampedValue:
-    timestamp: str = ev['order_date'] or ev['timestamp']
+    timestamp: str = ev.get('order_date', None) or ev.get('timestamp', None)
     timestamp: datetime = datetime.fromisoformat(timestamp)
     timestamp: Timestamp = Timestamp.from_utc_datetime(timestamp)
     return TimestampedValue(ev, timestamp)
@@ -61,18 +62,22 @@ with beam.Pipeline(options=opts) as pipeline:
         | 'TimestampEvent' >> beam.Map(assign_event_time)
         | 'WindowInto1Min' >> beam.WindowInto(FixedWindows(60))
     )
-
-    # split events into typed events according to event['event_type']
-    # TODO: add inventory, user_activity
-    order, unknown = ( # unknown types are stored in a side output
-        events 
-        | beam.ParDo(SplitAndCastEventsDoFn()).with_outputs('order', 'unknown')
+    # inventory, user_activity, unknown
+    order, inventory, unknown = events | beam.ParDo(SplitAndCastEventsDoFn()).with_outputs('order', 'inventory', 'unknown')
+    # hints:
+    order: beam.PCollection[OrderEvent]
+    inventory: beam.PCollection[InventoryEvent]
+    
+    #
+    order, invalid_order = (
+        order | beam.ParDo(OrderEventDQValidatorDoFn()).with_outputs('invalid', main='main')
     )
-    # verify business logic for events
-    order, invalid = (
-        order 
-        | beam.ParDo(EventDQValidatorDoFn()).with_outputs('invalid', main='main')
+    inventory, invalid_inventory = (
+        inventory | beam.ParDo(InventoryEventDQValidatorDoFn()).with_outputs('invalid', main='main')
     )
+    # hints:
+    order: beam.PCollection[OrderEvent]
+    inventory: beam.PCollection[InventoryEvent]
 
     # write valid events to output/
     for event_type, event in [
@@ -89,13 +94,22 @@ with beam.Pipeline(options=opts) as pipeline:
             file_naming=name_file)
     )
     
-    fact_order_header: beam.PCollection[FactOrderHeader] = order | beam.Map(FactOrderHeader.from_event).with_output_types(FactOrderHeader) 
-    fact_order_item: beam.PCollection[FactOrderHeader] = order | beam.FlatMap(FactOrderItem.from_event).with_output_types(FactOrderItem)
+    # create fact records for BQ
+    fact_order_header: beam.PCollection[FactOrderHeader] = (
+        order | "ToOrderHeaderFact" >> beam.Map(FactOrderHeader.from_event).with_output_types(FactOrderHeader) 
+    )
+    fact_order_item: beam.PCollection[FactOrderHeader] = (
+        order | "ToOrderItemFact" >> beam.FlatMap(FactOrderItem.from_event).with_output_types(FactOrderItem)
+    )
+    fact_inventory: beam.PCollection[FactInventory] = (
+        inventory | "ToInventoryFact" >>beam.Map(FactInventory.from_event).with_output_types(FactInventory)
+    )
 
     # write to BQ
     for table, fact in [
         ('fact_order_header', fact_order_header,),
         ('fact_order_item', fact_order_item),
+        ('fact_inventory', fact_inventory)
     ]:
         tag = camelcase(table)
         ( fact 
