@@ -12,12 +12,10 @@ from apache_beam.utils.timestamp import Timestamp
 from apache_beam.io import ReadFromPubSub
 from apache_beam.io.fileio import WriteToFiles
 
-from transforms.common import EventDQValidatorDoFn, WriteFactToBigQuery
+from transforms.common import SplitAndCastEventsDoFn, EventDQValidatorDoFn, WriteFactToBigQuery
 from transforms.order import OrderEvent, FactOrderHeader, FactOrderItem
 
 logging.getLogger().setLevel(logging.DEBUG)
-
-KNOWN_TYPES = ('order', 'inventory', 'user_activity', 'unknown')
 
 class MyOptions(PipelineOptions):
     @classmethod
@@ -48,12 +46,6 @@ def name_file(window, pane, shard_index, total_shards, compression, destination)
     filename = f"{destination}_{timestamp:%Y%m%d%H%M}.json"
     return filepath + "/" + filename
 
-def partition_by_type(event, num_partitions):
-    T = event.get("event_type")
-    if T in KNOWN_TYPES[:-1]:
-        return KNOWN_TYPES.index(T)
-    return len(KNOWN_TYPES) - 1
-
 def camelcase(snakecase: str) -> str:
     return "".join(part.capitalize() for part in snakecase.split("_"))
 
@@ -75,13 +67,14 @@ with beam.Pipeline(options=opts) as pipeline:
             destination=lambda ev: json.loads(ev)['event_type'],
             file_naming=name_file)
     )
-
-    order, inventory, user_activity, unknown = events | beam.Partition(partition_by_type, len(KNOWN_TYPES))
-   
+    # inventory, user_activity, unknown
+    order, unknown = (
+        events 
+        | beam.ParDo(SplitAndCastEventsDoFn()).with_outputs('order', 'invalid')
+    )
     #
-    order, invalid_order = (
+    order, invalid = (
         order 
-        | beam.Map(lambda ev: OrderEvent(**ev)).with_output_types(OrderEvent)
         | beam.ParDo(EventDQValidatorDoFn()).with_outputs('invalid', main='main')
     )
 
