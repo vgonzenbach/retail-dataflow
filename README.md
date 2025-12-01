@@ -39,11 +39,11 @@ ORDER BY
 
 ```
 
-* `fact_order_header` is derived from order events by dropping item-level information and flattening the address fields to allow clustering on coushipping_address_country and for improving usability of the end-user. 
+* `fact_order_header` is derived from order events by dropping item-level information and flattening the address fields to allow clustering on `shipping_address_country` and for improving usability of the end-user. 
 
 ### Order Item
 
-`fact_order_item` is a table that contains the order details at the item level. It is used for product-centric analytics. The table is partitioned by `order_date` and clustered by ``product_id`. This allows product-level aggregations to be performed efficiently. It can be joined with the fact_inventory table efficientlyto get the current inventory quantity for a product.
+`fact_order_item` is a table that contains the order details at the item level. It is used for product-centric analytics. The table is partitioned by `order_date` and clustered by `product_id`. This allows product-level aggregations to be performed efficiently. It can be efficiently joined with the `fact_inventory` table to get the current inventory quantity for a product.
 
 For instance, the following query counts the number of orders per product:
 
@@ -62,14 +62,14 @@ ORDER BY
     product_id
 ```
 
-* `fact_order_item` is derived from order events by exploding the items array, computing total_amount for each line item and enriching with order-level details such as order_id (for reference) and order_date (for partitioning).
+* `fact_order_item` is derived from order events by exploding the items array, computing `total_amount` for each line item and enriching with order-level details such as `order_id` (for reference) and `order_date` (for partitioning).
 
 
 ### Fact Order
 
 `fact_order` contains full order data at item-level granularity. With clustering on `customer_id` (and `order_id`), it's optimized for customer-centric analytics. Useful when you need both header and item-level data in a single query, avoiding joins. It is partitioned by `order_date` and clustered by `customer_id`. This allows customer-level aggregations to be performed efficiently. It can be efficiently joined with the `fact_user_activity` as well.
 
-A second clustering column on `order_id` allows for compression of the table since the explosion of the items array accounts for "duplicate" order-level data. By clustering on order_id, some storage savings can be achieved thanks to RLE compression.
+A second clustering column on `order_id` allows for compression of the table since the explosion of the items array accounts for "duplicate" order-level data. By clustering on `order_id`, some storage savings can be achieved thanks to RLE compression.
 
 As an example of usage, the following query counts the number of orders per customer:
 
@@ -87,7 +87,7 @@ ORDER BY
     customer_id
 ```
 
-Note that an argment could be made that this table is redundant with the previous two. In terms of storage it certainly is, but the different clustering strategies can be used to optimize distinct query needs. The user is encouraged to use the previous two tables if their use case requires only header-related or item-related data. 
+Note that an argument could be made that this table is redundant with the previous two. In terms of storage it certainly is, but the different clustering strategies can be used to optimize distinct query needs. The user is encouraged to use the previous two tables if their use case requires only header-related or item-related data. 
 
 ### Inventory  
 `fact_inventory` tracks inventory movements per product. Use it for stock-movement analytics (e.g. returns, restocks), especially since its clustered on `product_id` and movement `reason`.
@@ -127,7 +127,7 @@ FROM events.fact_user_activity;
 
 #### Further Notes
 
-All tables contains both date and timestamp columns for usability. An ingestion timestamp is automatically added to each row by BQ.
+All tables contain both date and timestamp columns for usability. An ingestion timestamp is automatically added by BQ to each row.
 
 
 ## Dataflow Pipeline
@@ -142,7 +142,7 @@ Functionalities include:
 - Event-to-fact modeling
 - Streaming ingestion into BigQuery fact tables
 
-Transformations are implemented under [transforms](./transforms). In-depth, details regarding the implementation are left to the reader but feel free to ask for help.
+Transformations are implemented under [transforms](./transforms). Implementation details are left to the reader, but feel free to ask for help.
 
 ### Usage
 
@@ -170,16 +170,17 @@ faker # to generate data to test the pipeline
 
 4. Generate fake data (optional):
 ```sh
-python3 publish.py --topic=$TOPIC_ID --n100
+python3 publish.py --topic=$TOPIC_ID -n 100
 ```
 This produces multiple event types (orders, inventory, invalid events) for ingestion testing.
 
-### Evidence and Observability
+## Observability & Verification
 
 Screenshots below illustrate the pipeline’s deployment, data storage structure, and runtime metrics — useful to validate behavior and performance.
+
 ---
 
-## Google Cloud Storage Output Structure
+### Google Cloud Storage Output Structure
 
 
 ![GCS Output](./images/gcs.png)  
@@ -187,28 +188,28 @@ Screenshots below illustrate the pipeline’s deployment, data storage structure
 
 ---
 
-## 2. BigQuery Fact Tables
+### BigQuery Fact Tables
 
 ![BigQuery Tables](./images/bq.png)  
 **Caption:** *`fact_order_header` populated from the streaming Dataflow pipeline. Confirms schema alignment, timestamp parsing, and ingestion correctness.*
 
 ---
 
-## 3. Dataflow Job Graph – Stage 1
+### Dataflow Job Graph – Stage 1
 
 ![Job Graph 1](./images/job-graph-1.png)  
 **Caption:** *High-level graph: Pub/Sub ingestion → JSON parsing → event timestamp assignment → fixed windows.*
 
 ---
 
-## 4. Dataflow Job Graph – Stage 2
+### Dataflow Job Graph – Stage 2
 
 ![Job Graph 2](./images/job-graph-2.png)  
 **Caption:** *Downstream branching into order and inventory flows, with validation, dict conversion, BigQuery sinks, and invalid record routing to GCS.*
 
 ---
 
-## 5. Dataflow Throughput Metrics
+### Dataflow Throughput Metrics
 
 ![Dataflow Throughput](./images/dataflow-throughput.png)  
 **Caption:** *Elements/sec across major pipeline steps. Shows the throughput of the pipeline.*
@@ -219,7 +220,7 @@ Screenshots below illustrate the pipeline’s deployment, data storage structure
 Due to time constraints, not all functionalities have been implemented. The following are the main missing features:
 
 - Ingestion to `fact_order` in BigQuery is currently omitted to avoid redundancy.
-- Support for fact_user_activity ingestion is incomplete — such events are presently routed to the “unknown” PCollection and ignored.. 
+- Support for `fact_user_activity` ingestion is incomplete — such events are presently routed to the “unknown” PCollection and ignored. 
 - Schema-contract validation and full dead-letter queueing for unknown events remain as TODOs.
 - Unit and integration tests are in progress.
 
