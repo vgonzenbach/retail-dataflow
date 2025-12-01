@@ -10,7 +10,7 @@ gcloud config set project $PROJECT_ID
 gcloud auth application-default set-quota-project $PROJECT_ID
 gcloud auth application-default login
 
-# python3 publish.py --topic=$TOPIC_ID
+python3 publish.py --topic=$TOPIC_ID --n100
 python3 pipeline.py \
     --runner=DataflowRunner \
     --project=$PROJECT_ID \

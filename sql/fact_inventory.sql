@@ -12,6 +12,6 @@ CREATE TABLE IF NOT EXISTS events.fact_inventory (
 PARTITION BY event_date
 CLUSTER BY
     product_id, -- efficient join with order_items within a warehouse
-    warehouse_id -- efficient join with dim_warehouse + window
+    reason
 ;
 

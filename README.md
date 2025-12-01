@@ -147,11 +147,12 @@ Functionalities include:
     - Modeling of fact based on events
     - Ingestion of data into BigQuery
 
-The custom transformations are defined in the [transforms](./transform) directory. Details regarding the implementation are left to the reader.
+The custom transformations are defined in the [transforms](./transform) directory. Details regarding the implementation are left to the reader but feel free to ask for help.
 
 ### Usage
 
 To run the pipeline, execute the [run.sh](./run.sh) script and a Dataflow job will be created. Prior steps need to be taken to set up the needed infrastructure such as:
+    - Create a GCP project
     - Create a Pub/Sub topic
     - Create a Pub/Sub subscription
     - Create a BigQuery dataset
@@ -159,75 +160,73 @@ To run the pipeline, execute the [run.sh](./run.sh) script and a Dataflow job wi
     - Create a GCS bucket
     - Enable the Dataflow API
 
-Once the infrastructure is set up, 
+In addition, the [requirements.txt](./requirements.txt) file contains the version-pinned dependencies required to run the pipeline. In reality, only two dependencies are required:
+```sh
+apache-beam[gcp]
+faker # to generate data to test the pipeline
+```
+
+Once the infrastructure is set up and the dependencies are installed, replace your `PROJECT_ID` in the [run.sh](./run.sh) file and any other parameters and run the script. First time you will need to login to GCP via the gcloud cli and after that you can comment the gcloud section out.
+
+Once the pipeline is running in GCP, you may generate fake in a separate terminal window (make sure to activate the virtual environment first):
+
+```sh
+python3 publish.py --topic=$TOPIC_ID --n100
+```
+
+This will generate 100 * 4 events: 
+ - one valid order event
+ - one invalid order event
+ - one valid inventory event
+ - one invalid inventory event
+
+### Testing Evidence
+
+Screenshots illustrate the system as deployed on **Pub/Sub → Dataflow → GCS + BigQuery**.
+
+---
+
+## Google Cloud Storage Output Structure
+
+![GCS Output](./images/gcs.png)  
+**Caption:** *Windowed file outputs organized by year/month/day/minute for the `inventory` stream. This verifies correct sharding and timestamp-based partitioning.*
+
+---
+
+## 2. BigQuery Fact Tables
+
+![BigQuery Tables](./images/bq.png)  
+**Caption:** *`fact_order_header` populated from the streaming Dataflow pipeline. Confirms schema alignment, timestamp parsing, and ingestion correctness.*
+
+---
+
+## 3. Dataflow Job Graph – Stage 1
+
+![Job Graph 1](./images/job-graph-1.png)  
+**Caption:** *High-level graph: Pub/Sub ingestion → JSON parsing → event timestamp assignment → fixed windows.*
+
+---
+
+## 4. Dataflow Job Graph – Stage 2
+
+![Job Graph 2](./images/job-graph-2.png)  
+**Caption:** *Downstream branching into order and inventory flows, with validation, dict conversion, BigQuery sinks, and invalid record routing to GCS.*
+
+---
+
+## 5. Dataflow Throughput Metrics
+
+![Dataflow Throughput](./images/dataflow-throughput.png)  
+**Caption:** *Elements/sec across major pipeline steps. Shows the throughput of the pipeline.*
 
 
+### Clarifications
 
+Due to time constraints, not all functionalities have been implemented. The following are the main missing features:
 
+- Ingestion to `fact_order` BQ table. For the purposes of this showcasing exercise, the implementation would have been rendundant with the other order tables.
+- Support for user_activity events. Not implemented because of time constraints. The current state of the pipeline should route these events to the `unknown` PCollection (which is completely ignored for the moment). 
+- Unit tests of transformations and integration tests of the pipeline is actively being worked on.
+- DLQ for unknown events. This would have taken more effort to come up with
 
-
-
-
-ToDo:
-
-1. save to BQ:
-  - split items table
-
-2. extend pipeline:
-
-  - flatten address
-  - create order table items
-    composite key order_id|item_id (sort by price to get determinisitic order)
-
-3. validate schema and data
-
-4. error handling
-
-5. dataflow runner
-
-6. monitoring
-
-
-# Future work
-
-
-
-Questions:
-
-Window based on event timestamp or stream time? 
-    - naming based on event time 
-    - but windowing based on stream time?
-
-Error handling:
-    - what if pubsub fails?
-    - what if gcs fails?
-    - what if bigquery fails?
-    - what if data is malformed?
-    - what if data is missing?
-    - what if data is invalid?
-    - what if event type is invalid?
-        - what if event type is not in the list of event types?
-
-Pending:
-    - save ingestion time in BQ
-
-
-documentation: 
-    fact_order_header table:
-        clustering on status, customer_id:
-            allows queries like:
-                how many order delivered today?
-                how many orders pending?
-            customer_id as 2nd cluster allows (less efficiently):
-                joins with dim_customer
-                customer-centric analytics
-            
-    fact_order_items table:
-        clustering on product_id, order_id:
-            allows queries like:
-                how many orders have a specific product?
-            order_id as 2nd cluster allows (less efficiently):
-                joins with fact_order_header
-
-    why not more clustering?
-        - clustering adjustment overhead with streaming 
+- Error handling of schema violations from upstream producers is left as TODO due to time commitment for manual testing. 

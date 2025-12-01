@@ -98,7 +98,6 @@ with beam.Pipeline(options=opts) as pipeline:
             path=ERROR_PATH + "invalid",
             destination=lambda s: json.loads(s).get('event', None).get('event_type', None),
             file_naming=name_file)
-
     )
     
     # create fact records for BQ
