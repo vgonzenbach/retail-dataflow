@@ -21,22 +21,17 @@ logging.getLogger().setLevel(logging.DEBUG)
 class MyOptions(PipelineOptions):
     @classmethod
     def _add_argparse_args(cls, parser):
-        parser.add_argument(
-            '--input_subscription',
-            dest='input_subscription',
-            help='Input PubSub subscription to pull from.')
-        parser.add_argument(
-            '--output_gcs',
-            dest='output_gcs',
-            required=True,
-            help='GCS Bucket to write results to.')
+        parser.add_argument('--input_subscription', dest='input_subscription', help='Input PubSub subscription to pull from.')
+        parser.add_argument('--output_location', dest='output_location', required=True, help='Path to write events to.')
+        parser.add_argument('--error_location', dest='error_location', required=True, help='Path to write errors to.')
+
 # set options
 opts = PipelineOptions()
 my_opts = opts.view_as(MyOptions)
 opts.view_as(StandardOptions).streaming = True
 
-OUTPUT_PATH = my_opts.output_gcs + "/output"
-ERROR_PATH = my_opts.output_gcs + "/errors"
+OUTPUT_PATH = my_opts.output_location
+ERROR_PATH = my_opts.error_location
 
 def assign_event_time(ev: dict) -> TimestampedValue:
     timestamp: str = ev.get('order_date', None) or ev.get('timestamp', None)
@@ -47,7 +42,7 @@ def assign_event_time(ev: dict) -> TimestampedValue:
 def name_file(window, pane, shard_index, total_shards, compression, destination):
     timestamp: datetime = window.start.to_utc_datetime()
     filepath = f"{destination}/{timestamp:%Y/%m/%d/%H/%M}"
-    filename = f"{destination}_{timestamp:%Y%m%d%H%M}.json"
+    filename = f"{destination}_{timestamp:%Y%m%d%H%M}{shard_index:04d}.json"
     return filepath + "/" + filename
 
 def camelcase(snakecase: str) -> str:
@@ -100,7 +95,7 @@ with beam.Pipeline(options=opts) as pipeline:
         | "MergeInvalid" >> beam.Flatten()
         | "InvalidToText" >> beam.Map(json.dumps)
         | "InvalidToGCS" >> WriteToFiles(
-            path=ERROR_PATH + "/invalid",
+            path=ERROR_PATH + "invalid",
             destination=lambda s: json.loads(s).get('event', None).get('event_type', None),
             file_naming=name_file)
 

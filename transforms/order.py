@@ -1,10 +1,6 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import NamedTuple, List
-from decimal import Decimal, getcontext
-
-# set decimal precision
-getcontext().prec = 2
 
 from apache_beam import DoFn, pvalue
 
@@ -18,7 +14,7 @@ class OrderItem:
     product_id: str
     product_name: str
     quantity: int
-    price: Decimal
+    price: float
 
 # Event schemas
 class OrderEvent(NamedTuple):
@@ -29,7 +25,7 @@ class OrderEvent(NamedTuple):
     status: str
     shipping_address: OrderShippingAddress
     items: List[OrderItem]
-    total_amount: Decimal
+    total_amount: float
 
 
 class FactOrderHeader(NamedTuple):
@@ -42,7 +38,7 @@ class FactOrderHeader(NamedTuple):
     shipping_address_street: str
     shipping_address_city: str
     shipping_address_country: str
-    total_amount: Decimal
+    total_amount: float
 
     @staticmethod
     def from_event(ev: OrderEvent) -> FactOrderHeader:
@@ -74,8 +70,8 @@ class FactOrderItem(NamedTuple):
     product_id: str
     product_name: str
     quantity: int
-    price: Decimal
-    total_amount: Decimal
+    price: float
+    total_amount: float
 
     @staticmethod
     def from_event(ev: OrderEvent) -> FactOrderItem:
@@ -92,8 +88,8 @@ class FactOrderItem(NamedTuple):
                 product_id      =   item['product_id'],
                 product_name    =   item['product_name'],
                 quantity        =   item['quantity'],
-                price           =   Decimal(item['price']).quantize(Decimal("0.01")),
-                total_amount    =   Decimal(item['quantity']) * Decimal(item['price']).quantize(Decimal("0.01"))
+                price           =   item['price'],
+                total_amount    =   round(item['quantity'] * item['price'], 2)
             ) 
 
     def to_dict(self) -> dict:
@@ -107,7 +103,7 @@ class OrderEventDQValidatorDoFn(DoFn):
         if event.status not in valid_states:
             errors.append(f"Value of field 'status' is not in set of valid states: {valid_states!r}.")
 
-        computed_total = sum(item['price'] * item['quantity'] for item in event.items)
+        computed_total = sum(round(item['price'] * item['quantity'], 2) for item in event.items)
         if event.total_amount != computed_total:
             errors.append(f"Value of field 'total_amount' != sum(price * quantity) for all items.")
 

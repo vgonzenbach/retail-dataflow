@@ -23,10 +23,18 @@ if __name__ == '__main__':
         required=True,
         help='Pubsub Topic to which to publish.'
     )
+    parser.add_argument(
+        '-n',
+        dest='n',
+        type=int,
+        required=True,
+        help='Iterations.'
+    )
     args  = parser.parse_args()
-    for make_event in (make_order_event, make_invalid_order_event, make_inventory_event, make_invalid_inventory_event):
-        event: dict = make_event()
-        event: str = json.dumps(event, indent=2)
-        logger.info(event)
-        event: bytes = bytes(event, encoding='utf-8')
-        publish_event(topic=args.topic, data=event)
+    for _ in range(args.n):
+        for make_event in (make_order_event, make_invalid_order_event, make_inventory_event, make_invalid_inventory_event):
+            event: dict = make_event()
+            event: str = json.dumps(event, indent=2)
+            logger.info(event)
+            event: bytes = bytes(event, encoding='utf-8')
+            publish_event(topic=args.topic, data=event)
