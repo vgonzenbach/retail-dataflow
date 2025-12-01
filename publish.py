@@ -8,11 +8,11 @@ logger = logging.getLogger(__file__)
 
 def publish_event(topic: str, data: bytes):
     with pubsub_v1.PublisherClient() as publisher:
-        logger.info(f"Publishing event to topic '{topic}'...")
+        logger.debug(f"Publishing event to topic '{topic}'...")
         future = publisher.publish(topic=topic, data=data)
         message_id = future.result()
         # TODO: try catch or case-switch
-        logger.info(f"Published message ID: {message_id}")
+        logger.debug(f"Published message ID: {message_id}")
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
@@ -23,10 +23,18 @@ if __name__ == '__main__':
         required=True,
         help='Pubsub Topic to which to publish.'
     )
+    parser.add_argument(
+        '-n',
+        dest='n',
+        type=int,
+        required=True,
+        help='Iterations.'
+    )
     args  = parser.parse_args()
-    for make_event in (make_order_event, make_invalid_order_event, make_inventory_event, make_invalid_inventory_event):
-        event: dict = make_event()
-        event: str = json.dumps(event, indent=2)
-        logger.info(event)
-        event: bytes = bytes(event, encoding='utf-8')
-        publish_event(topic=args.topic, data=event)
+    for _ in range(args.n):
+        for make_event in (make_order_event, make_invalid_order_event, make_inventory_event, make_invalid_inventory_event):
+            event: dict = make_event()
+            event: str = json.dumps(event, indent=2)
+            logger.debug(event)
+            event: bytes = bytes(event, encoding='utf-8')
+            publish_event(topic=args.topic, data=event)
